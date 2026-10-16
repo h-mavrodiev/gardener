@@ -86,6 +86,7 @@ func NewControllerManagerCommand(ctx context.Context) *cobra.Command {
 		// options for the dnsrecord controller
 		dnsRecordCtrlOpts = &localdnsrecord.ControllerOptions{
 			MaxConcurrentReconciles: 1,
+			DNSServerAddress:        "ns.local.gardener.cloud:53",
 		}
 
 		// options for the extension controllers

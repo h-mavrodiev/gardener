@@ -38,6 +38,8 @@ type AddOptions struct {
 	IgnoreOperationAnnotation bool
 	// ExtensionClasses are the configured extension classes for this extension deployment.
 	ExtensionClasses []extensionsv1alpha1.ExtensionClass
+	// DNSServerAddresss is the address of the DNS server to send updates to.
+	DNSServerAddress string
 }
 
 // AddToManagerWithOptions adds a controller with the given Options to the given manager.
@@ -48,8 +50,9 @@ func AddToManagerWithOptions(ctx context.Context, mgr manager.Manager, opts AddO
 	})
 
 	return dnsrecord.Add(mgr, dnsrecord.AddArgs{
-		Actuator: &Actuator{
-			DNSClient: &dns.Client{},
+		Actuator: &actuator{
+			dnsClient:     &dns.Client{},
+			dnsServerAddr: opts.DNSServerAddress,
 		},
 		ControllerOptions: opts.Controller,
 		Predicates:        dnsrecord.DefaultPredicates(ctx, mgr, opts.IgnoreOperationAnnotation),

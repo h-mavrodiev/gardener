@@ -22,24 +22,23 @@ import (
 const (
 	// dnsZone is the DNS zone managed by the local BIND9 server.
 	dnsZone = "local.gardener.cloud."
-	// dnsServerAddress is the address of the local BIND9 server.
-	dnsServerAddress = "ns.local.gardener.cloud:53"
 	// defaultTTL is the default TTL for DNS records when none is specified.
 	defaultTTL = 120
 )
 
-// DNSClient is an interface for sending DNS messages, allowing for testability.
-type DNSClient interface {
+// dnsClient is an interface for sending DNS messages, allowing for testability.
+type dnsClient interface {
 	Exchange(msg *dns.Msg, addr string) (*dns.Msg, time.Duration, error)
 }
 
-// Actuator implements the DNSRecord actuator for the local DNS provider.
-type Actuator struct {
-	DNSClient DNSClient
+// actuator implements the dnsRecord actuator for the local DNS provider.
+type actuator struct {
+	dnsClient     dnsClient
+	dnsServerAddr string
 }
 
 // Reconcile ensures that the DNS record is correctly represented via RFC 2136 dynamic DNS update.
-func (a *Actuator) Reconcile(_ context.Context, _ logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, _ *extensionscontroller.Cluster) error {
+func (a *actuator) Reconcile(_ context.Context, _ logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, _ *extensionscontroller.Cluster) error {
 	header, err := headerForDNSRecord(dnsRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create header for %s: %w", dnsRecord.Spec.Name, err)
@@ -61,7 +60,7 @@ func (a *Actuator) Reconcile(_ context.Context, _ logr.Logger, dnsRecord *extens
 }
 
 // Delete removes the DNS record via RFC 2136 dynamic DNS update.
-func (a *Actuator) Delete(_ context.Context, _ logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, _ *extensionscontroller.Cluster) error {
+func (a *actuator) Delete(_ context.Context, _ logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, _ *extensionscontroller.Cluster) error {
 	header, err := headerForDNSRecord(dnsRecord)
 	if err != nil {
 		return fmt.Errorf("failed to create header for %s: %w", dnsRecord.Spec.Name, err)
@@ -74,12 +73,12 @@ func (a *Actuator) Delete(_ context.Context, _ logr.Logger, dnsRecord *extension
 }
 
 // ForceDelete is the same as Delete for the local DNS provider.
-func (a *Actuator) ForceDelete(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
+func (a *actuator) ForceDelete(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
 	return a.Delete(ctx, log, dnsRecord, cluster)
 }
 
 // Migrate removes the DNS record if the shoot is not self-hosted.
-func (a *Actuator) Migrate(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
+func (a *actuator) Migrate(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
 	if v1beta1helper.IsShootSelfHosted(cluster.Shoot.Spec.Provider.Workers) {
 		// Do nothing when migrating DNSRecord of self-hosted shoot with managed infrastructure. The DNS
 		// records are still needed for the control plane machines to resolve the kube-apiserver domain.
@@ -90,12 +89,12 @@ func (a *Actuator) Migrate(ctx context.Context, log logr.Logger, dnsRecord *exte
 }
 
 // Restore is the same as Reconcile for the local DNS provider.
-func (a *Actuator) Restore(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
+func (a *actuator) Restore(ctx context.Context, log logr.Logger, dnsRecord *extensionsv1alpha1.DNSRecord, cluster *extensionscontroller.Cluster) error {
 	return a.Reconcile(ctx, log, dnsRecord, cluster)
 }
 
-func (a *Actuator) sendDNSUpdate(msg *dns.Msg) error {
-	resp, _, err := a.DNSClient.Exchange(msg, dnsServerAddress)
+func (a *actuator) sendDNSUpdate(msg *dns.Msg) error {
+	resp, _, err := a.dnsClient.Exchange(msg, a.dnsServerAddr)
 	if err != nil {
 		return fmt.Errorf("DNS update exchange failed: %w", err)
 	}

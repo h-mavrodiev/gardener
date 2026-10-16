@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package dnsrecord_test
+package dnsrecord
 
 import (
 	"time"
@@ -20,7 +20,6 @@ import (
 	gardencorev1beta1 "github.com/gardener/gardener/pkg/apis/core/v1beta1"
 	extensionsv1alpha1 "github.com/gardener/gardener/pkg/apis/extensions/v1alpha1"
 	"github.com/gardener/gardener/pkg/logger"
-	. "github.com/gardener/gardener/pkg/provider-local/controller/dnsrecord"
 )
 
 var _ = Describe("Actuator", func() {
@@ -28,7 +27,7 @@ var _ = Describe("Actuator", func() {
 		log       logr.Logger
 		dnsClient *fakeDNSClient
 
-		actuator extensionsdnsrecordcontroller.Actuator
+		dnsActuator extensionsdnsrecordcontroller.Actuator
 
 		cluster   *extensionscontroller.Cluster
 		dnsRecord *extensionsv1alpha1.DNSRecord
@@ -38,8 +37,9 @@ var _ = Describe("Actuator", func() {
 		log = logger.MustNewZapLogger(logger.DebugLevel, logger.FormatJSON, zap.WriteTo(GinkgoWriter))
 		dnsClient = &fakeDNSClient{resp: successResponse()}
 
-		actuator = &Actuator{
-			DNSClient: dnsClient,
+		dnsActuator = &actuator{
+			dnsClient:     dnsClient,
+			dnsServerAddr: "ns.local.gardener.cloud:53",
 		}
 
 		cluster = &extensionscontroller.Cluster{
@@ -62,7 +62,7 @@ var _ = Describe("Actuator", func() {
 
 	Describe("Reconcile", func() {
 		It("should send DNS UPDATE for A records", func(ctx SpecContext) {
-			Expect(actuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			msg := dnsClient.messages[0]
@@ -108,7 +108,7 @@ var _ = Describe("Actuator", func() {
 			dnsRecord.Spec.RecordType = extensionsv1alpha1.DNSRecordTypeAAAA
 			dnsRecord.Spec.Values = []string{"2001:db8::1"}
 
-			Expect(actuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			msg := dnsClient.messages[0]
@@ -145,7 +145,7 @@ var _ = Describe("Actuator", func() {
 			dnsRecord.Spec.RecordType = extensionsv1alpha1.DNSRecordTypeCNAME
 			dnsRecord.Spec.Values = []string{"some.other.name.gardener.cloud"}
 
-			Expect(actuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			msg := dnsClient.messages[0]
@@ -181,7 +181,7 @@ var _ = Describe("Actuator", func() {
 		It("should use default TTL when none is specified", func(ctx SpecContext) {
 			dnsRecord.Spec.TTL = nil
 
-			Expect(actuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Reconcile(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			// Insert RR should use default TTL of 120
@@ -191,7 +191,7 @@ var _ = Describe("Actuator", func() {
 
 	Describe("Delete", func() {
 		It("should send DNS UPDATE with RemoveRRset", func(ctx SpecContext) {
-			Expect(actuator.Delete(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Delete(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			msg := dnsClient.messages[0]
@@ -217,7 +217,7 @@ var _ = Describe("Actuator", func() {
 
 	Describe("Migrate", func() {
 		It("should delete for non-self-hosted shoots", func(ctx SpecContext) {
-			Expect(actuator.Migrate(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Migrate(ctx, log, dnsRecord, cluster)).To(Succeed())
 
 			Expect(dnsClient.messages).To(HaveLen(1))
 			msg := dnsClient.messages[0]
@@ -245,7 +245,7 @@ var _ = Describe("Actuator", func() {
 				ControlPlane: &gardencorev1beta1.WorkerControlPlane{},
 			}}
 
-			Expect(actuator.Migrate(ctx, log, dnsRecord, cluster)).To(Succeed())
+			Expect(dnsActuator.Migrate(ctx, log, dnsRecord, cluster)).To(Succeed())
 			Expect(dnsClient.messages).To(BeEmpty())
 		})
 	})
